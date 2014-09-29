@@ -6,16 +6,51 @@ import numpy as np
 from scipy.signal import butter
 from scipy.signal import lfilter
 
+import pylab as pl
+
 
 # Runs the YAAPT algorithm to pull out fundamental frequencies for each time
 def yaapt(data, sample_rate=44100):
     # Separate out the signal into the regular and the non-linearly
     # transformed signal, afterwards bandpass filtering both.
-    # TODO - bandpass filter
-    signal, signal_nonlinear = bandpass_filter(data), bandpass_filter(data ** 2)
+    #signal, signal_nonlinear = data, data ** 2
+    signal, signal_nonlinear = stft(data).T, stft(data).T ** 2
 
-    # Return the fundamental frequency
-    #return freqs
+    # Other stuff...
+    return 0
+
+
+# Implements special harmonics correlation. This can likely be optimized.
+# Input: M x N matrix, with M being frequencies and N being time.
+#   a window_length in frequencies.
+# Output: M x N matrix, with M being frequencies and N being time.
+def shc(signal, window_length=40., number_harmonics=3):
+    # This function finds what frequency corresponds to what index
+    freq_idx = lambda f: int(np.floor(float(f) / (44100. / 1024.)))
+
+    # This will hold the output
+    shc_signal = np.zeros(signal.shape)
+
+    # Loop through the window length
+    for f in [-1, 0, 1]:
+        for freq in range(signal.shape[0]):
+            # Calculate the indices for the harmonics to consider
+            harmonics = [r*freq+f for r in range(number_harmonics)
+                         if r*freq+f < signal.shape[0]]
+            # Compute the product of the amplitudes of this frequency
+            # multiplied by the amplitudes of the harmonics.
+            h = np.prod(np.array([signal[h,:] for h in harmonics]), axis=0)
+            shc_signal[freq, :] += h
+
+    return shc_signal
+
+
+# Runs STFT on the data for use in examining the spectrogram
+# Output: M x N matrix, M being time and N being frequencies
+def stft(data, fftsize=1024, overlap=4):   
+    w = scipy.hanning(fftsize+1)[:-1]
+    return np.array([np.fft.rfft(w*data[i:i+fftsize]) 
+                for i in range(0, len(data)-fftsize, fftsize / overlap)])
 
 
 #####################################################################################
@@ -28,6 +63,7 @@ if __name__ == '__main__':
     # Read in a WAV file of a Saxophone playing A220
     this_folder = os.path.dirname(os.path.abspath(__file__))
     sample_rate, wav_data = wavfile.read(this_folder + '/sample_sax_A220.wav')
+    print 'Sample Rate: %s' % sample_rate
 
     # Pull out the fundamental frequency from the signal
-    #freqs = yaapt(wav_data, sample_rate)
+    freqs = yaapt(wav_data, sample_rate)
